@@ -1,0 +1,687 @@
+erDiagram
+
+    %% =========================================================
+    %% IDENTITY SERVICE
+    %% FK markers in this diagram mean SAME-SERVICE PostgreSQL FK.
+    %% Cross-service UUID references intentionally have no FK marker.
+    %% =========================================================
+
+    USERS ||--o{ USER_SESSIONS : has
+    USERS ||--o| USER_MFA : has
+
+    USERS {
+      uuid id PK
+      varchar account_id UK
+      varchar email UK
+      varchar phone
+      varchar password_hash
+      varchar role
+      varchar status
+      varchar identity_fingerprint
+      timestamptz last_login_at
+      timestamptz blocked_at
+      timestamptz suspended_at
+      timestamptz created_at
+      timestamptz updated_at
+    }
+
+    USER_SESSIONS {
+      uuid id PK
+      uuid user_id FK
+      text refresh_token_hash
+      inet ip_address
+      text user_agent
+      timestamptz expires_at
+      timestamptz revoked_at
+      timestamptz created_at
+    }
+
+    USER_MFA {
+      uuid id PK
+      uuid user_id FK
+      boolean enabled
+      varchar method
+      text secret_encrypted
+      text backup_codes_encrypted
+      timestamptz created_at
+    }
+
+    %% =========================================================
+    %% USER SERVICE
+    %% =========================================================
+
+    USERS ||--o{ ADMIN_CUSTOMER_ASSIGNMENTS : assigned
+    USERS ||--o{ ACCESS_ACTION_REQUESTS : requests
+    USERS ||--o{ USER_STATUS_HISTORY : status_history
+
+    ADMIN_CUSTOMER_ASSIGNMENTS {
+      uuid id PK
+      uuid admin_id
+      uuid customer_id
+      uuid assigned_by
+      timestamptz assigned_at
+      timestamptz unassigned_at
+    }
+
+    ACCESS_ACTION_REQUESTS {
+      uuid id PK
+      uuid target_user_id
+      uuid requested_by
+      varchar action
+      text reason
+      varchar status
+      uuid decided_by
+      text decision_note
+      timestamptz decided_at
+      timestamptz created_at
+    }
+
+    USER_STATUS_HISTORY {
+      uuid id PK
+      uuid user_id
+      varchar old_status
+      varchar new_status
+      uuid changed_by
+      text reason
+      timestamptz created_at
+    }
+
+    %% =========================================================
+    %% WALLET SERVICE
+    %% One WALLETS row = one Global or Arena wallet.
+    %% No WALLET_ACCOUNTS table.
+    %% =========================================================
+
+    USERS ||--o{ WALLETS : owns
+    WALLETS ||--o{ WALLET_TRANSFERS : source
+    WALLETS ||--o{ WALLET_TRANSFERS : destination
+    WALLETS ||--o{ WALLET_HOLDS : holds
+    WALLETS ||--o{ WALLET_OPERATIONS : records
+
+    WALLETS {
+      uuid id PK
+      uuid owner_user_id
+      varchar wallet_type
+      varchar arena
+      char currency
+      numeric available_balance
+      numeric locked_balance
+      bigint version
+      varchar status
+      timestamptz created_at
+      timestamptz updated_at
+    }
+
+    WALLET_TRANSFERS {
+      uuid id PK
+      uuid source_wallet_id FK
+      uuid destination_wallet_id FK
+      numeric amount
+      varchar transfer_type
+      varchar idempotency_key UK
+      varchar status
+      timestamptz created_at
+      timestamptz completed_at
+    }
+
+    WALLET_HOLDS {
+      uuid id PK
+      uuid wallet_id FK
+      varchar reference_type
+      uuid reference_id
+      numeric amount
+      timestamptz created_at
+      timestamptz released_at
+    }
+
+    WALLET_OPERATIONS {
+      uuid id PK
+      uuid wallet_id FK
+      varchar operation_type
+      numeric amount
+      char currency
+      varchar reference_type
+      uuid reference_id
+      varchar idempotency_key UK
+      jsonb metadata
+      timestamptz created_at
+    }
+
+    %% =========================================================
+    %% LEDGER SERVICE
+    %% =========================================================
+
+    LEDGER_TRANSACTIONS ||--o{ LEDGER_ENTRIES : contains
+    LEDGER_ACCOUNTS ||--o{ LEDGER_ENTRIES : receives
+
+    LEDGER_ACCOUNTS {
+      uuid id PK
+      varchar account_code UK
+      varchar account_name
+      varchar account_type
+      uuid owner_user_id
+      char currency
+      boolean is_active
+      timestamptz created_at
+    }
+
+    LEDGER_TRANSACTIONS {
+      uuid id PK
+      varchar reference_type
+      uuid reference_id
+      varchar business_event
+      varchar idempotency_key UK
+      jsonb metadata
+      timestamptz posted_at
+    }
+
+    LEDGER_ENTRIES {
+      uuid id PK
+      uuid transaction_id FK
+      uuid ledger_account_id FK
+      varchar direction
+      numeric amount
+      char currency
+      timestamptz created_at
+    }
+
+    %% =========================================================
+    %% DEPOSIT SERVICE
+    %% =========================================================
+
+    DEPOSITS ||--o{ DEPOSIT_REVIEWS : reviewed
+    USERS ||--o{ DEPOSIT_REVIEWS : reviewer
+
+    DEPOSITS {
+      uuid id PK
+      varchar transaction_id UK
+      uuid customer_id
+      numeric amount
+      char currency
+      varchar payment_method
+      uuid payment_account_id
+      varchar payment_reference
+      uuid proof_file_id
+      varchar status
+      varchar approval_state
+      timestamptz credited_at
+      timestamptz created_at
+      timestamptz updated_at
+    }
+
+    DEPOSIT_REVIEWS {
+      uuid id PK
+      uuid deposit_id FK
+      uuid reviewer_id
+      varchar reviewer_role
+      varchar decision
+      text note
+      timestamptz created_at
+    }
+
+    %% =========================================================
+    %% WITHDRAWAL SERVICE
+    %% =========================================================
+
+    CUSTOMER_PAYOUT_ACCOUNTS ||--o{ WITHDRAWALS : used_by
+    WITHDRAWALS ||--o{ WITHDRAWAL_REVIEWS : reviewed
+    USERS ||--o{ WITHDRAWAL_REVIEWS : reviewer
+
+    CUSTOMER_PAYOUT_ACCOUNTS {
+      uuid id PK
+      uuid customer_id
+      varchar type
+      text account_data_encrypted
+      boolean is_default
+      timestamptz created_at
+    }
+
+    WITHDRAWALS {
+      uuid id PK
+      varchar request_id UK
+      uuid customer_id
+      uuid payout_account_id
+      numeric amount
+      char currency
+      varchar status
+      varchar approval_state
+      text admin_comment
+      varchar payout_reference
+      text failure_reason
+      timestamptz created_at
+      timestamptz completed_at
+    }
+
+    WITHDRAWAL_REVIEWS {
+      uuid id PK
+      uuid withdrawal_id FK
+      uuid reviewer_id
+      varchar reviewer_role
+      varchar decision
+      text note
+      timestamptz created_at
+    }
+
+    %% =========================================================
+    %% PAYMENT SERVICE
+    %% =========================================================
+
+    PAYMENT_PROVIDERS ||--o{ PAYMENT_ACCOUNTS : supports
+    PAYMENT_ACCOUNTS ||--o{ PAYMENT_ACCOUNT_VERSIONS : versions
+    PAYMENT_ACCOUNTS ||--o{ PAYMENT_SETTING_CHANGE_REQUESTS : changes
+    PAYMENT_PROVIDERS ||--o{ PAYMENT_ATTEMPTS : processes
+
+    PAYMENT_PROVIDERS {
+      uuid id PK
+      varchar code UK
+      varchar name
+      varchar status
+      text configuration_encrypted
+      timestamptz created_at
+    }
+
+    PAYMENT_ACCOUNTS {
+      uuid id PK
+      uuid provider_id FK
+      varchar type
+      varchar account_name
+      text sensitive_data_encrypted
+      uuid qr_file_id
+      varchar status
+      uuid created_by
+      timestamptz created_at
+    }
+
+    PAYMENT_ACCOUNT_VERSIONS {
+      uuid id PK
+      uuid payment_account_id FK
+      int version_number
+      jsonb snapshot
+      uuid changed_by
+      text change_reason
+      timestamptz created_at
+    }
+
+    PAYMENT_SETTING_CHANGE_REQUESTS {
+      uuid id PK
+      uuid payment_account_id FK
+      uuid requested_by
+      jsonb requested_snapshot
+      text reason
+      varchar status
+      uuid approved_by
+      timestamptz approved_at
+      timestamptz created_at
+    }
+
+    PAYMENT_ATTEMPTS {
+      uuid id PK
+      uuid provider_id FK
+      varchar reference_type
+      uuid reference_id
+      numeric amount
+      varchar external_reference
+      varchar status
+      timestamptz created_at
+    }
+
+    %% =========================================================
+    %% REFERRAL & REWARDS SERVICE
+    %% =========================================================
+
+    USERS ||--o{ REFERRAL_CODES : owns
+    REFERRAL_CODES ||--o{ REFERRALS : used_by
+    REFERRALS ||--o{ REFERRAL_QUALIFYING_EVENTS : qualifies
+    USERS ||--o{ GOLD_COIN_ACCOUNTS : owns
+    GOLD_COIN_ACCOUNTS ||--o{ GOLD_COIN_TRANSACTIONS : records
+    REFERRALS ||--o{ GOLD_COIN_TRANSACTIONS : rewards
+    REWARD_CONVERSIONS ||--o{ GOLD_COIN_TRANSACTIONS : consumes
+
+    REFERRAL_CODES {
+      uuid id PK
+      uuid owner_user_id
+      varchar code UK
+      timestamptz valid_from
+      timestamptz valid_until
+      boolean active
+      timestamptz created_at
+    }
+
+    REFERRALS {
+      uuid id PK
+      uuid referral_code_id FK
+      uuid referrer_user_id
+      uuid referred_user_id
+      timestamptz joined_at
+      varchar status
+    }
+
+    REFERRAL_QUALIFYING_EVENTS {
+      uuid id PK
+      uuid referral_id FK
+      varchar source_type
+      uuid source_id
+      numeric qualifying_amount
+      timestamptz occurred_at
+    }
+
+    GOLD_COIN_ACCOUNTS {
+      uuid id PK
+      uuid user_id
+      numeric coin_balance
+      timestamptz created_at
+      timestamptz updated_at
+    }
+
+    GOLD_COIN_TRANSACTIONS {
+      uuid id PK
+      uuid account_id FK
+      uuid referral_id
+      uuid reward_conversion_id
+      varchar type
+      numeric coins
+      varchar idempotency_key UK
+      timestamptz created_at
+    }
+
+    REWARD_CONVERSIONS {
+      uuid id PK
+      uuid user_id
+      numeric coins
+      numeric money_amount
+      char currency
+      numeric conversion_rate
+      varchar status
+      uuid ledger_transaction_id
+      timestamptz created_at
+      timestamptz completed_at
+    }
+
+    %% =========================================================
+    %% PRODUCT COMMON
+    %% =========================================================
+
+    PRODUCTS ||--o{ PRODUCT_EVENTS : emits
+
+    PRODUCTS {
+      uuid id PK
+      varchar code UK
+      varchar name
+      varchar status
+    }
+
+    PRODUCT_EVENTS {
+      uuid id PK
+      uuid product_id FK
+      uuid customer_id
+      varchar event_type
+      numeric amount
+      char currency
+      jsonb metadata
+      timestamptz occurred_at
+    }
+
+    %% =========================================================
+    %% SPORTSBOOK SERVICE
+    %% =========================================================
+
+    SPORTS_EVENTS ||--o{ SPORTS_MARKETS : has
+    SPORTS_MARKETS ||--o{ SPORTS_BETS : receives
+    SPORTS_BETS ||--o{ SPORTS_POSITIONS : creates
+    SPORTS_POSITIONS ||--o{ SPORTS_POSITION_TRADES : trades
+
+    SPORTS_EVENTS {
+      uuid id PK
+      varchar sport
+      varchar competition
+      varchar home_team
+      varchar away_team
+      timestamptz starts_at
+      varchar status
+    }
+
+    SPORTS_MARKETS {
+      uuid id PK
+      uuid event_id FK
+      varchar market_type
+      jsonb odds
+      varchar status
+    }
+
+    SPORTS_BETS {
+      uuid id PK
+      uuid customer_id
+      uuid market_id FK
+      numeric stake
+      varchar status
+      timestamptz created_at
+    }
+
+    SPORTS_POSITIONS {
+      uuid id PK
+      uuid customer_id
+      uuid bet_id FK
+      numeric quantity
+      numeric average_price
+      numeric realized_pnl
+      numeric unrealized_pnl
+    }
+
+    SPORTS_POSITION_TRADES {
+      uuid id PK
+      uuid position_id FK
+      varchar side
+      numeric quantity
+      numeric price
+      timestamptz executed_at
+    }
+
+    %% =========================================================
+    %% TRADING SERVICE
+    %% =========================================================
+
+    TRADING_INSTRUMENTS ||--o{ MARKET_QUOTES : quoted
+    TRADING_INSTRUMENTS ||--o{ TRADING_ORDERS : traded
+    TRADING_ORDERS ||--o{ TRADING_EXECUTIONS : executes
+    TRADING_INSTRUMENTS ||--o{ TRADING_POSITIONS : positions
+
+    TRADING_INSTRUMENTS {
+      uuid id PK
+      varchar symbol UK
+      varchar asset_class
+      varchar exchange
+      varchar status
+    }
+
+    MARKET_QUOTES {
+      uuid id PK
+      uuid instrument_id FK
+      numeric bid
+      numeric ask
+      numeric last_price
+      timestamptz quoted_at
+    }
+
+    TRADING_ORDERS {
+      uuid id PK
+      uuid customer_id
+      uuid instrument_id FK
+      varchar side
+      varchar order_type
+      numeric quantity
+      numeric limit_price
+      varchar status
+      varchar idempotency_key UK
+      timestamptz created_at
+    }
+
+    TRADING_EXECUTIONS {
+      uuid id PK
+      uuid order_id FK
+      numeric quantity
+      numeric price
+      timestamptz executed_at
+    }
+
+    TRADING_POSITIONS {
+      uuid id PK
+      uuid customer_id
+      uuid instrument_id FK
+      numeric quantity
+      numeric average_price
+      numeric realized_pnl
+      numeric unrealized_pnl
+    }
+
+    %% =========================================================
+    %% IGAMING SERVICE
+    %% =========================================================
+
+    IGAMING_GAMES ||--o{ IGAMING_ROUNDS : has
+    IGAMING_ROUNDS ||--o{ IGAMING_TRANSACTIONS : contains
+
+    IGAMING_GAMES {
+      uuid id PK
+      varchar provider
+      varchar game_code UK
+      varchar name
+      varchar category
+      varchar status
+    }
+
+    IGAMING_ROUNDS {
+      uuid id PK
+      uuid game_id FK
+      uuid customer_id
+      varchar external_round_id
+      varchar status
+      timestamptz started_at
+      timestamptz completed_at
+    }
+
+    IGAMING_TRANSACTIONS {
+      uuid id PK
+      uuid round_id FK
+      varchar type
+      numeric amount
+      varchar status
+      varchar idempotency_key UK
+      timestamptz created_at
+    }
+
+    %% =========================================================
+    %% RISK SERVICE
+    %% =========================================================
+
+    RISK_CASES ||--o{ RISK_EVENTS : contains
+    USERS ||--o{ RISK_CASES : subject
+
+    RISK_CASES {
+      uuid id PK
+      uuid customer_id
+      varchar reference_type
+      uuid reference_id
+      numeric score
+      varchar decision
+      varchar status
+      timestamptz created_at
+    }
+
+    RISK_EVENTS {
+      uuid id PK
+      uuid case_id FK
+      varchar rule_code
+      numeric score
+      jsonb evidence
+      timestamptz created_at
+    }
+
+    %% =========================================================
+    %% REPORTING SERVICE
+    %% =========================================================
+
+    REPORTING_DAILY_METRICS {
+      uuid id PK
+      date metric_date
+      uuid customer_id
+      uuid admin_id
+      varchar arena
+      numeric volume
+      numeric deposits
+      numeric withdrawals
+      numeric invested
+      numeric pnl
+    }
+
+    %% =========================================================
+    %% AUDIT / NOTIFICATION / FILE / RECONCILIATION
+    %% =========================================================
+
+    AUDIT_EVENTS {
+      uuid id PK
+      uuid actor_id
+      varchar action
+      varchar entity_type
+      uuid entity_id
+      jsonb before_data
+      jsonb after_data
+      inet ip_address
+      varchar request_id
+      timestamptz created_at
+    }
+
+    NOTIFICATIONS {
+      uuid id PK
+      uuid user_id
+      varchar type
+      varchar channel
+      varchar status
+      varchar title
+      text message
+      jsonb metadata
+      timestamptz created_at
+      timestamptz sent_at
+      timestamptz read_at
+    }
+
+    FILES {
+      uuid id PK
+      varchar storage_provider
+      varchar bucket
+      text object_key UK
+      text original_filename
+      varchar mime_type
+      bigint size_bytes
+      varchar checksum_sha256
+      varchar status
+      uuid uploaded_by
+      timestamptz created_at
+    }
+
+    RECONCILIATION_RUNS ||--o{ RECONCILIATION_ITEMS : contains
+
+    RECONCILIATION_RUNS {
+      uuid id PK
+      uuid provider_id
+      varchar status
+      int total_records
+      int matched_records
+      int exception_records
+      timestamptz started_at
+      timestamptz completed_at
+    }
+
+    RECONCILIATION_ITEMS {
+      uuid id PK
+      uuid run_id FK
+      varchar reference_type
+      uuid reference_id
+      varchar external_reference
+      numeric internal_amount
+      numeric external_amount
+      numeric difference
+      varchar status
+      text resolution_note
+      uuid resolved_by
+      timestamptz resolved_at
+    }
